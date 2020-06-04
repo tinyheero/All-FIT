@@ -12,6 +12,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import textwrap
 import seaborn as sns
+import logging
 
 __author__ = "Jui Wan Loh"
 __date__ = "Date: 02-2019"
@@ -33,15 +34,15 @@ def gray_box_accuracy(vaf_list,depth_list,purity,ploidy_list,varType):
 	weight = [{} for j in range(len(vaf_list))]
 	alpha = 1 - vaf_CI
 	for j in range(len(vaf_list)):
-		d = depth_list[j] 
+		d = depth_list[j]
 		ploidy = ploidy_list[j]
 		if ploidy == 2:
 			if varType == "somatic":
 				name_likelihood = ["Somatic, LOH CNmut=1"]
 			else:
-		        	name_likelihood = ["Somatic, LOH CNmut=1","Germline, LOH CNmut=1"]
+				name_likelihood = ["Somatic, LOH CNmut=1","Germline, LOH CNmut=1"]
 		else:
-                        name_likelihood = []
+			name_likelihood = []
 		som_list = []
 		germ_list = []
 		for i in range(ploidy):
@@ -63,7 +64,7 @@ def gray_box_accuracy(vaf_list,depth_list,purity,ploidy_list,varType):
 			CCF[j]["Somatic, CNmut=%i"%(i+1)] = vaf_list[j]/(((i+1)*purity)/(2*(1-purity)+ploidy*purity))	#somatic LOH high CN
 			if varType != "somatic":
 				CCF[j]["Germline, CNmut=%i"%(i+1)] = ((vaf_list[j]*(2-2*purity+ploidy*purity))-1+purity)/((i+1)*purity)	#germline LOH high CN
-				
+
 		freqLB,freqUB = binom_interval(round(d*vaf_list[j]),d,alpha)
 		f_range = np.arange(freqLB,freqUB+f_incre,f_incre)
 		f_range[-1] = freqUB
@@ -99,10 +100,11 @@ def gray_box_accuracy(vaf_list,depth_list,purity,ploidy_list,varType):
 	return CCF, weight
 
 def conf_interval(x,x2,num_mut,std_dev):
-	x_err = ((np.array(x2)/num_mut) - (np.array(x)/num_mut)**2)**0.5 
+	x_err = ((np.array(x2)/num_mut) - (np.array(x)/num_mut)**2)**0.5
 	return x-std_dev*np.array(x_err)
 
 def predicted_purity_from_CFF(vaf_list,depth_list,SNV_list,out_name,ploidy_list,LOH_thres,std_dev,W_thres,varType):
+	logging.info("Running predicted_purity_from_CFF")
 	all_purity = np.arange(0.01,1,0.01)
 	CCF = [[] for x in range(len(all_purity))]
 	weight = [[] for x in range(len(all_purity))]
@@ -137,6 +139,8 @@ def predicted_purity_from_CFF(vaf_list,depth_list,SNV_list,out_name,ploidy_list,
 	fig = plt.figure()
 	lines = []
 	labels = []
+
+	logging.info("Plotting Variants likelihood distribution")
 	s1 = plot(fig,1,all_purity,[],[],SNV_list,gene_CCF_weight,dic_color,SNV_list,"Variants likelihood distribution",[],[],[])
 	lines.extend(s1[0])
 	labels.extend(s1[1])
@@ -173,7 +177,7 @@ def predicted_purity_from_CFF(vaf_list,depth_list,SNV_list,out_name,ploidy_list,
 			for pur in range(len(all_purity)):
 				Bef2_sum_CCF_weight[pur] += unlog[pur]
 				Bef2_sum_CCF_weight_sq[pur] += unlog[pur]**2
-		
+
 	###remove subclonal mutation
 	index_purity_bef2 = np.argmin(Bef2_sum_CCF_weight)
 	pur2 = all_purity[index_purity_bef2]
@@ -364,9 +368,10 @@ def main():
 	parser.add_argument('-o','--outputName',help='Output file name prefix',required=True)
 	parser.add_argument('-s','--standardDeviation',default=2,help='How many standard deviation or confidence interval of estimated purity')
 	parser.add_argument('-t','--typeOfInput',choices=['somatic','all'],default='all',help='Types of variants input whether germline variants are removed(somatic) or not(all)')
+	parser.add_argument('--logFile', default='application.log', help='Log file')
 	args = parser.parse_args()
 
-	varType = args.typeOfInput	
+	varType = args.typeOfInput
 	std_dev = args.standardDeviation
 	LOH_thres = 0.5
 	W_thres = 0.7
@@ -380,12 +385,21 @@ def main():
 	out_dir = args.outputDir
 	if not os.path.exists(out_dir):
 		os.makedirs(out_dir)
-	
+
+	logging.basicConfig(
+		filename=args.logFile,
+		level=logging.INFO,
+		filemode='w',
+		format= '[%(asctime)s] {%(pathname)s:%(lineno)d} %(levelname)s - %(message)s',
+		datefmt='%H:%M:%S'
+	)
+
+	logging.info("Reading input data")
 	filename = args.inputDirFile
 	fh = open(filename,"r")
 	data = fh.readlines()[1:]
 	fh.close()
-	
+
 	for row in data:
 		row = row.strip().split("\t")
 		ind_vaf.append(float(row[1])/100)
@@ -407,6 +421,8 @@ def main():
 
 	CCF_pred_purity,CI_pred_purity = predicted_purity_from_CFF(sorted_vaf,sorted_depth,sorted_SNV,out_dir+"/"+out_name,sorted_ploidy,LOH_thres,std_dev,W_thres,varType)
 	print(out_name,"\t",CCF_pred_purity,"\t",CI_pred_purity)
+
+	logging.info("Finished")
 
 if __name__ == "__main__":
 	main()
