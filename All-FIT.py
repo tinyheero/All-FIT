@@ -103,7 +103,7 @@ def conf_interval(x,x2,num_mut,std_dev):
 	x_err = ((np.array(x2)/num_mut) - (np.array(x)/num_mut)**2)**0.5
 	return x-std_dev*np.array(x_err)
 
-def predicted_purity_from_CFF(vaf_list,depth_list,SNV_list,out_name,ploidy_list,LOH_thres,std_dev,W_thres,varType):
+def predicted_purity_from_CFF(vaf_list,depth_list,SNV_list,out_name,ploidy_list,LOH_thres,std_dev,W_thres,varType, no_legend_plot):
 	logging.info("Running predicted_purity_from_CFF")
 	all_purity = np.arange(0.01,1,0.01)
 	CCF = [[] for x in range(len(all_purity))]
@@ -145,7 +145,7 @@ def predicted_purity_from_CFF(vaf_list,depth_list,SNV_list,out_name,ploidy_list,
 	lines.extend(s1[0])
 	labels.extend(s1[1])
 
-	##remove germline mutation no LOH
+	logging.info("Remove germline mutations no LOH")
 	index_purity_bef1 = np.argmin(Bef1_sum_CCF_weight)
 	pur1 = all_purity[index_purity_bef1]
 	if varType == "somatic":
@@ -158,9 +158,9 @@ def predicted_purity_from_CFF(vaf_list,depth_list,SNV_list,out_name,ploidy_list,
 			germ_weight = 0.0
 			flag_LOH = False
 			if ploidy_list[mut] == 2:
-			        germ_list = ["Germline, LOH CNmut=1"]
+				germ_list = ["Germline, LOH CNmut=1"]
 			else:
-	                        germ_list = []
+				germ_list = []
 			for i in range(ploidy_list[mut]):
 				germ_list.append("Germline, CNmut=%i"%(i+1))
 			for model in germ_list:
@@ -178,7 +178,7 @@ def predicted_purity_from_CFF(vaf_list,depth_list,SNV_list,out_name,ploidy_list,
 				Bef2_sum_CCF_weight[pur] += unlog[pur]
 				Bef2_sum_CCF_weight_sq[pur] += unlog[pur]**2
 
-	###remove subclonal mutation
+	logging.info("Remove subclonal mutations")
 	index_purity_bef2 = np.argmin(Bef2_sum_CCF_weight)
 	pur2 = all_purity[index_purity_bef2]
 	subclonal_mut_index = []
@@ -256,12 +256,15 @@ def predicted_purity_from_CFF(vaf_list,depth_list,SNV_list,out_name,ploidy_list,
 #	fig.savefig(out_name+"_likelihood.eps",format="eps",dpi=350)
 	plt.close(fig)
 
-	##Plotting figure legend
-	fig_leg = plt.figure()
-	fig_leg.legend(lines, labels,'center',ncol=4)
-	fig_leg.savefig(out_name+"_likelihood_legend.png",bbox_inches='tight')
-#	fig_leg.savefig(out_name+"_likelihood_legend.eps",bbox_inches='tight',format="eps",dpi=350)
-	plt.close(fig_leg)
+    # If you have too many mutations (e.g. > 10000), plotting the figure legend
+    # can fail.
+	if not no_legend_plot:
+		logging.info("Plotting figure legend")
+		fig_leg = plt.figure()
+		fig_leg.legend(lines, labels,'center',ncol=4)
+		fig_leg.savefig(out_name+"_likelihood_legend.png",bbox_inches='tight')
+#		fig_leg.savefig(out_name+"_likelihood_legend.eps",bbox_inches='tight',format="eps",dpi=350)
+		plt.close(fig_leg)
 
 	return str(all_purity[np.argmin(sum_CCF_weight)]),",".join([str(x) for x in CI_p3])
 
@@ -368,6 +371,7 @@ def main():
 	parser.add_argument('-o','--outputName',help='Output file name prefix',required=True)
 	parser.add_argument('-s','--standardDeviation',default=2,help='How many standard deviation or confidence interval of estimated purity')
 	parser.add_argument('-t','--typeOfInput',choices=['somatic','all'],default='all',help='Types of variants input whether germline variants are removed(somatic) or not(all)')
+	parser.add_argument('--noLegendPlot', action='store_true', help='Do not create the legend plot.')
 	parser.add_argument('--logFile', default='application.log', help='Log file')
 	args = parser.parse_args()
 
@@ -419,7 +423,7 @@ def main():
 		sorted_SNV.append(ind_SNV[idx])
 		sorted_ploidy.append(ind_ploidy[idx])
 
-	CCF_pred_purity,CI_pred_purity = predicted_purity_from_CFF(sorted_vaf,sorted_depth,sorted_SNV,out_dir+"/"+out_name,sorted_ploidy,LOH_thres,std_dev,W_thres,varType)
+	CCF_pred_purity,CI_pred_purity = predicted_purity_from_CFF(sorted_vaf,sorted_depth,sorted_SNV,out_dir+"/"+out_name,sorted_ploidy,LOH_thres,std_dev,W_thres,varType, args.noLegendPlot)
 	print(out_name,"\t",CCF_pred_purity,"\t",CI_pred_purity)
 
 	logging.info("Finished")
